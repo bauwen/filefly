@@ -49,8 +49,7 @@ function createTCPServer(port, directory) {
     });
     server.on("connection", (socket) => {
         socket.on("data", protocol.receiveMessage((type, name, buffer) => {
-            const fullPath = path.join(directory, name);
-            
+            const fullPath = path.join(directory, name);    
             switch (type) {
                 case "directory":
                     //if (fs.existsSync(fullPath) && !fs.statSync(fullPath).isDirectory()) {
@@ -60,8 +59,7 @@ function createTCPServer(port, directory) {
                         fs.mkdirSync(fullPath);
                     }
                     socket.write(protocol.createMessage("received"));
-                    break;
-                    
+                    break;                 
                 case "file":
                     try {
                         fs.writeFileSync(fullPath, buffer);

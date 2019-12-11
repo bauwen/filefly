@@ -26,7 +26,11 @@ function main(args) {
     
     if (!host) {
         searchHost(port, (address) => {
-            sendFiles(entry, address || host, port);
+            if (!address) {
+                console.log("Unable to find a receiving computer on the network.");
+                return;
+            }
+            sendFiles(entry, address, port);
         });
     } else {
         sendFiles(entry, host, port);
@@ -68,7 +72,7 @@ function sendFiles(entry, host, port) {
     const list = [];
     const size = mapFileStructure(list, prefix, base);
     
-    const count = list.length;//list.filter(x => x.type === "file").length;
+    const count = list.length;
     console.log(`Found ${count} file${count === 1 ? "" : "s"} to send.`);
     console.log("Total size: " + size + " bytes.\n");
     

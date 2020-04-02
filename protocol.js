@@ -1,6 +1,8 @@
+const stream = require("stream");
+
 module.exports = {
     receiveMessage,
-    createMessage,
+    sendMessage,
 };
 
 /*
@@ -17,7 +19,7 @@ module.exports = {
  *          12 | {"length":7} | 63 6f 6e 74 65 6e 74
  *
  */
-function receiveMessage(callback) {
+ function receiveMessage(inputStream, callback) {
     let metadata = null;
     let data = null;
     
@@ -27,20 +29,30 @@ function receiveMessage(callback) {
     let offset = 0;
     let bytesRead = 0;
     let bytesToRead = 4;
-
-    return (chunk) => {
+    let outputStream = null;
+    
+    inputStream.on("data", (chunk) => {
         const length = chunk.length;
         let mark = 0;
 
         while (mark < length) {
             bytesRead += length - mark;
-
+            
             if (bytesRead < bytesToRead) {
-                chunk.copy(buffer, offset, mark, length);
+                if (state === 2) {
+                    outputStream.write(chunk.slice(mark, length));
+                } else {
+                    chunk.copy(buffer, offset, mark, length);
+                }
                 offset = bytesRead;
                 break;
-            } else {
-                chunk.copy(buffer, offset, mark, mark + bytesToRead - offset);
+            }
+            else {
+                if (state === 2) {
+                    outputStream.end(chunk.slice(mark, mark + bytesToRead - offset));
+                } else {
+                    chunk.copy(buffer, offset, mark, mark + bytesToRead - offset);
+                }
                 mark += bytesToRead - offset;
                 offset = 0;
                 bytesRead = 0;
@@ -55,48 +67,46 @@ function receiveMessage(callback) {
                     case 1:
                         metadata = JSON.parse(buffer.toString("utf8"));
                         bytesToRead = metadata.length;
-                        buffer = Buffer.alloc(bytesToRead);
+                        outputStream = new stream.PassThrough();
+                        callback(metadata.name, metadata.content, outputStream);
                         state = 2;
-
-                        if (bytesToRead > 0) {
+                        
+                        if (bytesToRead === 0) {
+                            outputStream.end();
+                        } else {
                             break;
                         }
-
+                        
                     case 2:
                         data = buffer;
                         bytesToRead = 4;
                         buffer = header;
+                        outputStream = null;
                         state = 0;
-
-                        callback(metadata.name, metadata.content, data);
                         break;
                 }
             }
         }
-    };
+    });
 }
 
-function createMessage(name, content, buffer) {
-    let dataLength = 0;
-    if (buffer !== undefined) {
-        if (!Buffer.isBuffer(buffer)) {
-            throw new TypeError("buffer must be a buffer, not " + typeof buffer);
-        }
-        dataLength = buffer.length;
+function sendMessage(outputStream, name, content, inputSize, inputStream) {
+    if (inputSize === undefined || inputStream === undefined) {
+        inputSize = 0;
     }
+    
     const json = JSON.stringify({
         name: name,
         content: content,
-        length: dataLength
+        length: inputSize,
     });
     const metadataLength = Buffer.byteLength(json);
-    const packet = Buffer.alloc(4 + metadataLength + dataLength);
-
+    const packet = Buffer.alloc(4 + metadataLength);
     packet.writeUInt32BE(metadataLength);
     packet.write(json, 4, metadataLength);
-    if (dataLength > 0) {
-        buffer.copy(packet, 4 + metadataLength, 0, dataLength);
+    outputStream.write(packet);
+    
+    if (inputSize > 0) {
+        inputStream.pipe(outputStream, { end: false });
     }
-
-    return packet;
 }

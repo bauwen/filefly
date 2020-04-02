@@ -78,7 +78,7 @@ function sendFiles(entry, host, port) {
     
     let index = 0;
     const socket = net.connect(port, host);
-    socket.on("data", protocol.receiveMessage(id => {
+    protocol.receiveMessage(socket, (id) => {
         if (id === "received") {
             if (index < list.length - 1) {
                 index += 1;
@@ -88,22 +88,27 @@ function sendFiles(entry, host, port) {
                 socket.end();
             }
         }
-    }));
+    });
     sendNextFile(socket, list, index, prefix);
 }
 
 function sendNextFile(socket, list, index, prefix) {
     const entry = list[index];
+    
+    console.log(`${index + 1}/${list.length}: ${entry.name}`);
+    
     switch (entry.type) {
         case "directory":
-            socket.write(protocol.createMessage("directory", entry.name));
+            protocol.sendMessage(socket, "directory", entry.name);
             break;
+            
         case "file":
-            const buffer = fs.readFileSync(path.join(prefix, entry.name));
-            socket.write(protocol.createMessage("file", entry.name, buffer));
+            const pathname = path.join(prefix, entry.name);
+            const fileSize = fs.statSync(pathname).size;
+            const fileStream = fs.createReadStream(pathname);
+            protocol.sendMessage(socket, "file", entry.name, fileSize, fileStream);
             break;
     }
-    console.log(`${index + 1}/${list.length}`);
 }
 
 function mapFileStructure(list, prefix, base) {

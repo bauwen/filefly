@@ -32,24 +32,29 @@ function main(args) {
 
 function createUDPServer(port) {
     const socket = dgram.createSocket("udp4");
+    
     socket.on("listening", () => {
         socket.setBroadcast(true);
     });
+    
     socket.on("message", (message, info) => {
         console.log(`Received broadcast message from ${info.address}:${info.port}.`);
         socket.send("hi", port + 1, "255.255.255.255");
     });
+    
     socket.bind(port + 2);
 }
 
 function createTCPServer(port, directory) {
     const server = net.createServer();
+    
     server.on("listening", () => {
         console.log("Server listening on port " + port + ".\n");
     });
+    
     server.on("connection", (socket) => {
-        socket.on("data", protocol.receiveMessage((type, name, buffer) => {
-            const fullPath = path.join(directory, name);    
+        protocol.receiveMessage(socket, (type, name, dataStream) => {
+            const fullPath = path.join(directory, name);
             switch (type) {
                 case "directory":
                     //if (fs.existsSync(fullPath) && !fs.statSync(fullPath).isDirectory()) {
@@ -57,21 +62,28 @@ function createTCPServer(port, directory) {
                     //}
                     if (!fs.existsSync(fullPath)) {
                         fs.mkdirSync(fullPath);
+                        console.log(`Created directory '${name}'.`);
                     }
-                    socket.write(protocol.createMessage("received"));
-                    break;                 
+                    protocol.sendMessage(socket, "received");
+                    break;
+                    
                 case "file":
-                    try {
-                        fs.writeFileSync(fullPath, buffer);
+                    const fileStream = fs.createWriteStream(fullPath);
+                    
+                    dataStream.on("data", (data) => {
+                        fileStream.write(data);
+                    });
+                    
+                    dataStream.on("end", () => {
+                        fileStream.end();
                         console.log(`Received file '${name}'.`);
-                    } catch (err) {
-                        console.log(`Received file '${name}' (but did not get written).`);
-                    }
-                    socket.write(protocol.createMessage("received"));
+                        protocol.sendMessage(socket, "received");
+                    });
                     break;
             }
-        }));
+        });
     });
+    
     server.listen(port);
 }
 

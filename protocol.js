@@ -7,6 +7,7 @@ module.exports = {
 
 /*
  * The wire protocol:
+ * -----------------
  *
  *      Packet layout:
  *
@@ -53,6 +54,7 @@ module.exports = {
                 } else {
                     chunk.copy(buffer, offset, mark, mark + bytesToRead - offset);
                 }
+                
                 mark += bytesToRead - offset;
                 offset = 0;
                 bytesRead = 0;
